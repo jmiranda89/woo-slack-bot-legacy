@@ -1,4 +1,4 @@
-# Woo Slack Bot (Legacy)
+# Woo Slack Bot V2
 
 Slack bot that connects to WooCommerce to draft products, update prices, find orders, and generate order PDFs from mail logs.
 

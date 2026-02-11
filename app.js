@@ -653,6 +653,71 @@ app.post('/slack/interact', bodyParser.urlencoded({ extended: true }), async (re
   }
 });
 
+
+// --- /findcustomid ---
+// Slack usage: /findcustomid 12345
+app.post('/slack/findcustomid', async (req, res) => {
+  const { text, channel_id } = req.body;
+  const orderId = (text || '').trim();
+
+  res.status(200).send(`🔍 Looking up custom order number for Woo order ID *${orderId}*...`);
+
+  if (!orderId || isNaN(orderId)) {
+    await web.chat.postMessage({
+      channel: channel_id,
+      text: "❌ Please enter a valid numeric WooCommerce Order ID."
+    });
+    return;
+  }
+
+  try {
+    const orderRes = await axios.get(
+      `${woo.url}/wp-json/wc/v3/orders/${orderId}`,
+      { headers: getWooAuthHeaders() }
+    );
+
+    const order = orderRes.data;
+    const customMeta = order.meta_data?.find(m => m.key === '_alg_wc_custom_order_number');
+
+    if (!customMeta || customMeta.value == null) {
+      await web.chat.postMessage({
+        channel: channel_id,
+        text: `⚠️ No custom order number found on Woo order ID *${orderId}*.`
+      });
+      return;
+    }
+
+    const customOrderNumber = customMeta.value.toString();
+    const customerName = `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim();
+    const customerEmail = order.billing?.email || '';
+
+    await web.chat.postMessage({
+      channel: channel_id,
+      text: `✅ Custom order number found for Woo order ID *${orderId}*`,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text:
+              `*Woo Order ID:* ${orderId}\n` +
+              `*Custom Order Number:* *${customOrderNumber}*\n` +
+              (customerName ? `*Customer:* ${customerName}\n` : '') +
+              (customerEmail ? `*Email:* ${customerEmail}\n` : '')
+          }
+        }
+      ]
+    });
+
+  } catch (err) {
+    console.error("FINDCUSTOMID error:", err.response?.data || err.message);
+    await web.chat.postMessage({
+      channel: channel_id,
+      text: `❌ Could not find order ID *${orderId}* or failed to retrieve order.`
+    });
+  }
+});
+
 app.listen(port, () => {
   console.log(`🚀 Slack bot is running on http://localhost:${port}`);
 });

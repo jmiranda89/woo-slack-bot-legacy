@@ -509,12 +509,11 @@ app.post('/slack/interact', bodyParser.urlencoded({ extended: true }), async (re
       const safeName = subject.replace(/[^\w\- ]+/g, '').slice(0, 60).trim() || `mail-${mailId}`;
       const filename = `${safeName}.pdf`;
 
-      await web.files.upload({
-        channels: channel,
-        file: pdfBuffer,
-        filename,
-        filetype: 'pdf',
-        title: filename
+      await web.files.uploadV2({
+        channel_id: channel,
+       filename,
+       title: filename,
+       file: pdfBuffer
       });
 
       await web.chat.postMessage({ channel, text: `✅ PDF uploaded: *${filename}*` });

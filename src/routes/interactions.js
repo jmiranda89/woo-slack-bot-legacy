@@ -1,6 +1,5 @@
 'use strict';
 
-const bodyParser = require('body-parser');
 const express = require('express');
 const { web } = require('../clients/slack');
 const { htmlToPdfBuffer } = require('../services/pdf');
@@ -13,11 +12,25 @@ const router = express.Router();
  * /slack/interact - single endpoint for all interactive Slack actions.
  * Uses the stored session to complete multi-step workflows.
  */
-router.post('/slack/interact', bodyParser.urlencoded({ extended: true }), async (req, res) => {
-  const payload = JSON.parse(req.body.payload);
-  const action = payload.actions[0];
+router.post('/slack/interact', async (req, res) => {
+  let payload;
+  try {
+    payload = JSON.parse(req.body.payload);
+  } catch (err) {
+    return res.status(400).send('Invalid payload');
+  }
+
+  const action = payload.actions?.[0];
+  if (!action?.action_id) {
+    return res.status(400).send('Invalid action');
+  }
+
   const slackUserId = payload.user?.id; // authoritative Slack user id
-  const channel = payload.channel.id;
+  const channel = payload.channel?.id;
+
+  if (!channel) {
+    return res.status(400).send('Invalid channel');
+  }
 
   res.status(200).send(); // Acknowledge immediately
 
@@ -25,8 +38,14 @@ router.post('/slack/interact', bodyParser.urlencoded({ extended: true }), async 
   if (action.action_id === 'orderpdf_generate') {
     try {
       const parts = (action.value || '').split('|');
+      const expectedUserId = parts.length > 1 ? parts[0] : null;
       const mailIdStr = parts.length > 1 ? parts[1] : parts[0];
       const mailId = parseInt(mailIdStr, 10);
+
+      if (expectedUserId && expectedUserId !== slackUserId) {
+        await web.chat.postMessage({ channel, text: '❌ This button can only be used by the original requester.' });
+        return;
+      }
 
       if (!mailId || Number.isNaN(mailId)) {
         await web.chat.postMessage({ channel, text: '❌ Invalid mail log selection.' });
@@ -59,8 +78,55 @@ router.post('/slack/interact', bodyParser.urlencoded({ extended: true }), async 
       await web.chat.postMessage({ channel, text: `✅ PDF uploaded: *${filename}*` });
       return;
     } catch (err) {
-      console.error('ORDERPDF generation failed:', err.response?.data || err.message);
+      console.error('ORDERPDF generation failed:', err.message);
       await web.chat.postMessage({ channel, text: '❌ Failed to generate/upload PDF.' });
+      return;
+    }
+  }
+
+  if (action.action_id === 'edit_order_status') {
+    try {
+      const parts = (action.value || '').split('|');
+      const expectedUserId = parts[0];
+      const orderId = parts[1];
+      const targetStatusRaw = parts[2];
+      const targetStatus = String(targetStatusRaw || '')
+        .trim()
+        .toLowerCase();
+
+      if (!expectedUserId || expectedUserId !== slackUserId) {
+        await web.chat.postMessage({ channel, text: '❌ This button can only be used by the original requester.' });
+        return;
+      }
+
+      if (!orderId || Number.isNaN(Number(orderId)) || !targetStatus) {
+        await web.chat.postMessage({ channel, text: '❌ Invalid status update request.' });
+        return;
+      }
+
+      const currentRes = await wooGet(`/orders/${orderId}`);
+      const currentStatus = String(currentRes.data?.status || '')
+        .trim()
+        .toLowerCase();
+
+      if (currentStatus === targetStatus) {
+        await web.chat.postMessage({
+          channel,
+          text: `ℹ️ Order *${orderId}* is already in *${targetStatus}* status.`
+        });
+        return;
+      }
+
+      await wooPut(`/orders/${orderId}`, { status: targetStatus });
+
+      await web.chat.postMessage({
+        channel,
+        text: `✅ Order *${orderId}* status changed from *${currentStatus || 'unknown'}* to *${targetStatus}*.`
+      });
+      return;
+    } catch (err) {
+      console.error('Edit order status failed:', err.message);
+      await web.chat.postMessage({ channel, text: '❌ Failed to update order status.' });
       return;
     }
   }
@@ -108,7 +174,7 @@ router.post('/slack/interact', bodyParser.urlencoded({ extended: true }), async 
       deleteSession(slackUserId);
       return;
     } catch (err) {
-      console.error('Save customer meta failed:', err.response?.data || err.message);
+      console.error('Save customer meta failed:', err.message);
       await web.chat.postMessage({ channel, text: '❌ Failed to save customer metadata.' });
       return;
     }
@@ -122,7 +188,7 @@ router.post('/slack/interact', bodyParser.urlencoded({ extended: true }), async 
 
       await web.chat.postMessage({ channel, text: `✅ *${productName}* has been removed successfully.` });
     } catch (err) {
-      console.error('Error drafting product:', err.response?.data || err.message);
+      console.error('Error drafting product:', err.message);
       await web.chat.postMessage({ channel, text: '❌ Failed to remove product.' });
     }
 
@@ -178,11 +244,13 @@ router.post('/slack/interact', bodyParser.urlencoded({ extended: true }), async 
       deleteSession(slackUserId);
       return;
     } catch (err) {
-      console.error('Price update failed:', err.response?.data || err.message);
+      console.error('Price update failed:', err.message);
       await web.chat.postMessage({ channel, text: '❌ Price update failed.' });
       return;
     }
   }
+
+  await web.chat.postMessage({ channel, text: '⚠️ Unsupported action.' });
 });
 
 module.exports = router;

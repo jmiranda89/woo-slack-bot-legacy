@@ -26,15 +26,20 @@ Create a `.env` file in the project root with the following variables:
 ```
 PORT=3000
 SLACK_BOT_TOKEN=...
+SLACK_SIGNING_SECRET=...
 WOO_URL=https://yourstore.example
 WOO_USERNAME=...
 WOO_PASSWORD=...
+WOO_TIMEOUT_MS=10000
+SESSION_TTL_MS=900000
 ADMIN_EDIT_URL=https://yourstore.example/wp-admin/admin.php?page=wc-orders&action=edit&id=
 ```
 
 Notes:
 - `ADMIN_EDIT_URL` is optional; the default points to the Pathway Bookstore admin edit URL.
 - `WOO_URL` should be the base site URL (no trailing slash).
+- `WOO_TIMEOUT_MS` controls Woo API request timeout (default: 10000).
+- `SESSION_TTL_MS` controls in-memory session TTL in ms (default: 15 minutes).
 
 ## Run
 ```bash
@@ -42,6 +47,7 @@ npm start
 ```
 
 The app listens on `http://localhost:<PORT>`.
+Health check endpoint: `GET /healthz`
 
 ## Slack Endpoints
 Configure these endpoints in your Slack app:
@@ -51,6 +57,7 @@ Configure these endpoints in your Slack app:
 - `/slack/priceupdate` (slash command: update price by SKU)
 - `/slack/findidorder` (slash command: find by Woo ID)
 - `/slack/editorder` (slash command: admin edit link)
+- `/slack/editorderstatus` (slash command: inspect order/payment details and change status)
 - `/slack/customermeta` (slash command: customer metadata)
 - `/slack/orderpdf` (slash command: search mail logs and generate PDF)
 - `/slack/interact` (interactive actions endpoint)
@@ -63,8 +70,15 @@ src/
   config/
     index.js         Environment configuration
   routes/
-    commands.js      Slash command handlers
+    commands.js      Slash command router composition
+    commands/
+      products.js    Product command handlers
+      orders.js      Order command handlers
+      customers.js   Customer metadata handlers
+      pdf.js         PDF command handlers
     interactions.js  Interactive action handlers
+  middleware/
+    slackAuth.js     Slack request signature verification
   services/
     pdf.js           HTML -> PDF conversion
     woo.js           WooCommerce API helpers
@@ -75,5 +89,6 @@ app.js               Legacy entrypoint (shim)
 ```
 
 ## Notes
-- Sessions are stored in memory and cleared on process restart.
-- The WooCommerce API calls use Basic Auth from `.env` credentials.
+- All `/slack/*` requests are verified using Slack signing secret.
+- Sessions are stored in memory with TTL and are cleared on process restart.
+- The WooCommerce API calls use Basic Auth from `.env` credentials with request timeouts.

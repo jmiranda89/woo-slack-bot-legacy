@@ -84,7 +84,7 @@ router.post('/slack/interact', async (req, res) => {
     }
   }
 
-  if (action.action_id === 'edit_order_status') {
+  if (action.action_id.startsWith('edit_order_status_')) {
     try {
       const parts = (action.value || '').split('|');
       const expectedUserId = parts[0];

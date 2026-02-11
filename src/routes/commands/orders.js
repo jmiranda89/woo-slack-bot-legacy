@@ -36,7 +36,7 @@ function buildStatusButtons(userId, orderId, currentStatus) {
       text: { type: 'plain_text', text: `Set ${statusLabel(status)}` },
       style: status === 'completed' ? 'primary' : undefined,
       value: `${userId}|${orderId}|${status}`,
-      action_id: 'edit_order_status'
+      action_id: `edit_order_status_${status.replace(/[^a-z0-9]/g, '_')}`
     }));
 
   return elements;

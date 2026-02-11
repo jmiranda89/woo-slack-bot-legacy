@@ -14,6 +14,7 @@ Slack bot that connects to WooCommerce to draft products, update prices, find or
 - Node.js (LTS recommended)
 - Slack app with slash commands + interactive components enabled
 - WooCommerce REST API credentials
+- WordPress plugin from this repo installed on the WooCommerce store
 
 ## Install
 ```bash
@@ -61,6 +62,37 @@ Configure these endpoints in your Slack app:
 - `/slack/customermeta` (slash command: customer metadata)
 - `/slack/orderpdf` (slash command: search mail logs and generate PDF)
 - `/slack/interact` (interactive actions endpoint)
+
+## WordPress Plugin
+This repo includes a reusable WordPress plugin at:
+
+- `/Users/jmiranda89/GitHub/woo-slack-bot-legacy/WordpressPlugin/woo-slack-store-tools`
+
+Main plugin file:
+
+- `/Users/jmiranda89/GitHub/woo-slack-bot-legacy/WordpressPlugin/woo-slack-store-tools/Woo Slack Store Tools.php`
+
+What it provides:
+
+- Mail log REST endpoints used by `/slack/orderpdf`:
+  - `GET /wp-json/wc/v3/mail-log/search`
+  - `GET /wp-json/wc/v3/mail-log/{id}`
+- Woo admin order search support for `_alg_wc_custom_order_number`
+- New order email output with both Woo ID and custom order number
+- REST-enabled user meta fields: `customer_code`, `customer_class`
+
+Install on a store:
+
+1. Copy `woo-slack-store-tools` into `wp-content/plugins/`.
+2. Activate **Woo Slack Store Tools** in WordPress admin.
+3. Ensure WooCommerce is active.
+4. Ensure WP Mail Logging table `wpml_mails` exists for mail log endpoints.
+
+Build a zip for distribution:
+
+```bash
+/Users/jmiranda89/GitHub/woo-slack-bot-legacy/WordpressPlugin/woo-slack-store-tools/build-plugin-zip.sh
+```
 
 ## Project Structure
 ```
